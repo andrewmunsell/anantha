@@ -87,7 +87,7 @@ type ProfilesData struct {
 }
 
 // RenderProfiles renders the profiles template with data from loadedValues
-func RenderProfiles(loadedValues *LoadedValues) (string, error) {
+func RenderProfiles(loadedValues *LoadedValues, zone string) (string, error) {
 	activities := []string{"home", "away", "sleep", "wake", "manual"}
 	snapshot := loadedValues.Snapshot()
 
@@ -96,9 +96,9 @@ func RenderProfiles(loadedValues *LoadedValues) (string, error) {
 	}
 
 	for _, activity := range activities {
-		htspKey := fmt.Sprintf("1/activities/%s/htsp", activity)
-		clspKey := fmt.Sprintf("1/activities/%s/clsp", activity)
-		fanKey := fmt.Sprintf("1/activities/%s/fan", activity)
+		htspKey := fmt.Sprintf("%s/activities/%s/htsp", zone, activity)
+		clspKey := fmt.Sprintf("%s/activities/%s/clsp", zone, activity)
+		fanKey := fmt.Sprintf("%s/activities/%s/fan", zone, activity)
 
 		htspVal, hasHtsp := snapshot[htspKey]
 		clspVal, hasClsp := snapshot[clspKey]
@@ -175,7 +175,7 @@ type ScheduleData struct {
 }
 
 // RenderSchedule renders the schedule template with data from loadedValues
-func RenderSchedule(loadedValues *LoadedValues) (string, error) {
+func RenderSchedule(loadedValues *LoadedValues, zone string) (string, error) {
 	days := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 	daySchedules := make(map[string][]SchedulePeriod)
 
@@ -186,9 +186,9 @@ func RenderSchedule(loadedValues *LoadedValues) (string, error) {
 		var periods []SchedulePeriod
 
 		for period := 1; period <= 5; period++ {
-			timeKey := fmt.Sprintf("1/program/%s/period %d/time", day, period)
-			activityKey := fmt.Sprintf("1/program/%s/period %d/activity", day, period)
-			enabledKey := fmt.Sprintf("1/program/%s/period %d/enabled", day, period)
+			timeKey := fmt.Sprintf("%s/program/%s/period %d/time", zone, day, period)
+			activityKey := fmt.Sprintf("%s/program/%s/period %d/activity", zone, day, period)
+			enabledKey := fmt.Sprintf("%s/program/%s/period %d/enabled", zone, day, period)
 
 			timeVal, hasTime := snapshot[timeKey]
 			activityVal, hasActivity := snapshot[activityKey]

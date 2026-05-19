@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func MetricsHandler(loadedValues *LoadedValues) http.Handler {
+func MetricsHandler(loadedValues *LoadedValues, zone string) http.Handler {
 	outsideTempGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "anantha",
 		Name:      "outside_temp",
@@ -106,8 +107,8 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 		Name:      "zone_temp",
 		Help:      "Zone temperature (in °F)",
 	}, []string{"zone"})
-	loadedValues.OnChange1("1/rt", func(rt TimestampedValue) {
-		zoneTempGauge.WithLabelValues("1").Set(float64(rt.value.GetFloatValue()))
+	loadedValues.OnChange1(fmt.Sprintf("%s/rt", zone), func(rt TimestampedValue) {
+		zoneTempGauge.WithLabelValues(zone).Set(float64(rt.value.GetFloatValue()))
 	})
 	prometheus.MustRegister(zoneTempGauge)
 
@@ -116,8 +117,8 @@ func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 		Name:      "zone_humidity",
 		Help:      "Zone humidity percentage (0-100)",
 	}, []string{"zone"})
-	loadedValues.OnChange1("1/rh", func(rh TimestampedValue) {
-		zoneHumidityGauge.WithLabelValues("1").Set(float64(rh.value.GetFloatValue()))
+	loadedValues.OnChange1(fmt.Sprintf("%s/rh", zone), func(rh TimestampedValue) {
+		zoneHumidityGauge.WithLabelValues(zone).Set(float64(rh.value.GetFloatValue()))
 	})
 	prometheus.MustRegister(zoneHumidityGauge)
 

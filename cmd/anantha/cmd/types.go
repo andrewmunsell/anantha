@@ -32,9 +32,7 @@ func (t TimestampedValue) ToString() string {
 	switch t.value.Name {
 	case "sensor/wallControl/rh":
 		return fmt.Sprintf("%d %%", t.value.GetAnotherIntValue())
-	case "1/rh":
-		return fmt.Sprintf("%.1f %%", t.value.GetFloatValue())
-	case "sensor/wallControl/rt", "1/htsp", "1/clsp", "1/rt":
+	case "sensor/wallControl/rt":
 		return fmt.Sprintf("%.1f F", t.value.GetFloatValue())
 	case "system/oat", "oducoiltmp", "dischargetmp", "sucttemp":
 		return fmt.Sprintf("%d F", t.value.GetIntValue())
@@ -61,6 +59,16 @@ func (t TimestampedValue) ToString() string {
 			return fmt.Sprintf("%d kWh", val)
 		}
 		return fmt.Sprintf("%d", val)
+	}
+
+	// Zone-specific keys: <zone>/<suffix>
+	if parts := strings.SplitN(t.value.Name, "/", 2); len(parts) == 2 {
+		switch parts[1] {
+		case "rh":
+			return fmt.Sprintf("%.1f %%", t.value.GetFloatValue())
+		case "htsp", "clsp", "rt":
+			return fmt.Sprintf("%.1f F", t.value.GetFloatValue())
+		}
 	}
 
 	switch t.value.ConfigType {

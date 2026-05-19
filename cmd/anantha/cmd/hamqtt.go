@@ -130,10 +130,12 @@ func (h *HAMQTT) installSubscriptions() {
 			})
 		},
 	)
+}
 
-	h.subscribe("zone/1/fanmode/set",
+func (h *HAMQTT) subscribeZone(zone string) {
+	h.subscribe(fmt.Sprintf("zone/%s/fanmode/set", zone),
 		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
-			activityVal := h.loadedValues.Get("1/currentActivity")
+			activityVal := h.loadedValues.Get(fmt.Sprintf("%s/currentActivity", zone))
 			if activityVal.value == nil {
 				return
 			}
@@ -141,7 +143,7 @@ func (h *HAMQTT) installSubscriptions() {
 			log.Printf("About to set fan mode for %s to %s", currentActivity, msg.Payload())
 			h.sendCommand([]*carrier.ConfigSetting{
 				{
-					Name:       fmt.Sprintf("zones/1/activities/%s/fan", currentActivity),
+					Name:       fmt.Sprintf("zones/%s/activities/%s/fan", zone, currentActivity),
 					ConfigType: carrier.ConfigType_CT_STRING,
 					Value: &carrier.ConfigSetting_MaybeStrValue{
 						MaybeStrValue: []byte(HAFanModeToCarrier[string(msg.Payload())]),
@@ -151,50 +153,50 @@ func (h *HAMQTT) installSubscriptions() {
 		},
 	)
 
-	h.subscribe("zone/1/preset_mode/set",
+	h.subscribe(fmt.Sprintf("zone/%s/preset_mode/set", zone),
 		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
 			switch string(msg.Payload()) {
 			case "none":
 				// Reset to schedule
-				log.Println("About to reset preset mode for zone 1")
+				log.Printf("About to reset preset mode for zone %s", zone)
 				h.sendCommand([]*carrier.ConfigSetting{
 					{
-						Name:       "zones/1/hold/hold",
+						Name:       fmt.Sprintf("zones/%s/hold/hold", zone),
 						ConfigType: carrier.ConfigType_CT_BOOL,
 						Value: &carrier.ConfigSetting_BoolValue{
 							BoolValue: false,
 						},
 					},
 					{
-						Name:       "zones/1/hold/holdActivity",
+						Name:       fmt.Sprintf("zones/%s/hold/holdActivity", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
 					{
-						Name:       "zones/1/hold/otmr",
+						Name:       fmt.Sprintf("zones/%s/hold/otmr", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
 				})
 			default:
-				log.Printf("About to set preset mode for zone 1 to %s", msg.Payload())
+				log.Printf("About to set preset mode for zone %s to %s", zone, msg.Payload())
 				h.sendCommand([]*carrier.ConfigSetting{
 					{
-						Name:       "zones/1/hold/hold",
+						Name:       fmt.Sprintf("zones/%s/hold/hold", zone),
 						ConfigType: carrier.ConfigType_CT_BOOL,
 						Value: &carrier.ConfigSetting_BoolValue{
 							BoolValue: true,
 						},
 					},
 					{
-						Name:       "zones/1/hold/holdActivity",
+						Name:       fmt.Sprintf("zones/%s/hold/holdActivity", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value: &carrier.ConfigSetting_MaybeStrValue{
 							MaybeStrValue: msg.Payload(),
 						},
 					},
 					{
-						Name:       "zones/1/hold/otmr",
+						Name:       fmt.Sprintf("zones/%s/hold/otmr", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
@@ -203,47 +205,47 @@ func (h *HAMQTT) installSubscriptions() {
 		},
 	)
 
-	h.subscribe("zone/1/temp_high/set",
+	h.subscribe(fmt.Sprintf("zone/%s/temp_high/set", zone),
 		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
-			log.Printf("About to set high temp for zone 1 to %s", msg.Payload())
+			log.Printf("About to set high temp for zone %s to %s", zone, msg.Payload())
 			clsp, err := strconv.ParseFloat(string(msg.Payload()), 32)
 			if err != nil {
 				log.Printf("Unable to parse cool setpoint %s: %s", msg.Payload(), err)
 			}
 			var cfgSettings []*carrier.ConfigSetting
-			if string(h.loadedValues.Get("1/currentActivity").value.GetMaybeStrValue()) != "manual" {
+			if string(h.loadedValues.Get(fmt.Sprintf("%s/currentActivity", zone)).value.GetMaybeStrValue()) != "manual" {
 				cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 					{
-						Name:       "zones/1/hold/hold",
+						Name:       fmt.Sprintf("zones/%s/hold/hold", zone),
 						ConfigType: carrier.ConfigType_CT_BOOL,
 						Value: &carrier.ConfigSetting_BoolValue{
 							BoolValue: true,
 						},
 					},
 					{
-						Name:       "zones/1/hold/holdActivity",
+						Name:       fmt.Sprintf("zones/%s/hold/holdActivity", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value: &carrier.ConfigSetting_MaybeStrValue{
 							MaybeStrValue: []byte("manual"),
 						},
 					},
 					{
-						Name:       "zones/1/hold/otmr",
+						Name:       fmt.Sprintf("zones/%s/hold/otmr", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
 					{
-						Name:       "zones/1/activities/manual/htsp",
+						Name:       fmt.Sprintf("zones/%s/activities/manual/htsp", zone),
 						ConfigType: carrier.ConfigType_CT_FLOAT,
 						Value: &carrier.ConfigSetting_FloatValue{
-							FloatValue: h.loadedValues.Get("1/htsp").value.GetFloatValue(),
+							FloatValue: h.loadedValues.Get(fmt.Sprintf("%s/htsp", zone)).value.GetFloatValue(),
 						},
 					},
 					{
-						Name:       "zones/1/activities/manual/fan",
+						Name:       fmt.Sprintf("zones/%s/activities/manual/fan", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value: &carrier.ConfigSetting_MaybeStrValue{
-							MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+							MaybeStrValue: h.loadedValues.Get(fmt.Sprintf("%s/fan", zone)).value.GetMaybeStrValue(),
 						},
 					},
 				}...)
@@ -251,7 +253,7 @@ func (h *HAMQTT) installSubscriptions() {
 
 			cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 				{
-					Name:       "zones/1/activities/manual/clsp",
+					Name:       fmt.Sprintf("zones/%s/activities/manual/clsp", zone),
 					ConfigType: carrier.ConfigType_CT_FLOAT,
 					Value: &carrier.ConfigSetting_FloatValue{
 						FloatValue: float32(clsp),
@@ -263,9 +265,9 @@ func (h *HAMQTT) installSubscriptions() {
 		},
 	)
 
-	h.subscribe("zone/1/temp_low/set",
+	h.subscribe(fmt.Sprintf("zone/%s/temp_low/set", zone),
 		func(_ mqtt_paho.Client, msg mqtt_paho.Message) {
-			log.Printf("About to set low temp for zone 1 to %s", msg.Payload())
+			log.Printf("About to set low temp for zone %s to %s", zone, msg.Payload())
 			htsp, err := strconv.ParseFloat(string(msg.Payload()), 32)
 			if err != nil {
 				log.Printf("Unable to parse heat setpoint %s: %s", msg.Payload(), err)
@@ -276,40 +278,40 @@ func (h *HAMQTT) installSubscriptions() {
 			// "temp_low/set" and "temp_high/set" when changing temperature, in that order.
 			// So the value of "htsp" set by "temp_low/set" gets clobbered by "temp_high/set"
 			// handler immediately after, because we haven't yet gotten a response from the
-			// thermostat to update "1/htsp".
-			if string(h.loadedValues.Get("1/currentActivity").value.GetMaybeStrValue()) != "manual" {
+			// thermostat to update "<zone>/htsp".
+			if string(h.loadedValues.Get(fmt.Sprintf("%s/currentActivity", zone)).value.GetMaybeStrValue()) != "manual" {
 				cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 					{
-						Name:       "zones/1/hold/hold",
+						Name:       fmt.Sprintf("zones/%s/hold/hold", zone),
 						ConfigType: carrier.ConfigType_CT_BOOL,
 						Value: &carrier.ConfigSetting_BoolValue{
 							BoolValue: true,
 						},
 					},
 					{
-						Name:       "zones/1/hold/holdActivity",
+						Name:       fmt.Sprintf("zones/%s/hold/holdActivity", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value: &carrier.ConfigSetting_MaybeStrValue{
 							MaybeStrValue: []byte("manual"),
 						},
 					},
 					{
-						Name:       "zones/1/hold/otmr",
+						Name:       fmt.Sprintf("zones/%s/hold/otmr", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value:      &carrier.ConfigSetting_MaybeStrValue{},
 					},
 					{
-						Name:       "zones/1/activities/manual/clsp",
+						Name:       fmt.Sprintf("zones/%s/activities/manual/clsp", zone),
 						ConfigType: carrier.ConfigType_CT_FLOAT,
 						Value: &carrier.ConfigSetting_FloatValue{
-							FloatValue: h.loadedValues.Get("1/clsp").value.GetFloatValue(),
+							FloatValue: h.loadedValues.Get(fmt.Sprintf("%s/clsp", zone)).value.GetFloatValue(),
 						},
 					},
 					{
-						Name:       "zones/1/activities/manual/fan",
+						Name:       fmt.Sprintf("zones/%s/activities/manual/fan", zone),
 						ConfigType: carrier.ConfigType_CT_STRING,
 						Value: &carrier.ConfigSetting_MaybeStrValue{
-							MaybeStrValue: h.loadedValues.Get("1/fan").value.GetMaybeStrValue(),
+							MaybeStrValue: h.loadedValues.Get(fmt.Sprintf("%s/fan", zone)).value.GetMaybeStrValue(),
 						},
 					},
 				}...)
@@ -317,7 +319,7 @@ func (h *HAMQTT) installSubscriptions() {
 
 			cfgSettings = append(cfgSettings, []*carrier.ConfigSetting{
 				{
-					Name:       "zones/1/activities/manual/htsp",
+					Name:       fmt.Sprintf("zones/%s/activities/manual/htsp", zone),
 					ConfigType: carrier.ConfigType_CT_FLOAT,
 					Value: &carrier.ConfigSetting_FloatValue{
 						FloatValue: float32(htsp),
@@ -328,6 +330,164 @@ func (h *HAMQTT) installSubscriptions() {
 			h.sendCommand(cfgSettings)
 		},
 	)
+}
+
+func (h *HAMQTT) publishDiscovery(zone string) {
+	deviceField := func(key string) string {
+		v := h.loadedValues.Get(key)
+		if v.value == nil {
+			return ""
+		}
+		return string(v.value.GetMaybeStrValue())
+	}
+
+	serialVal := h.loadedValues.Get("profile/serial")
+	if serialVal.value == nil {
+		return
+	}
+	serial := string(serialVal.value.GetMaybeStrValue())
+
+	type haDevice struct {
+		Identifiers  []string `json:"identifiers"`
+		Name         string   `json:"name"`
+		Manufacturer string   `json:"manufacturer,omitempty"`
+		Model        string   `json:"model,omitempty"`
+		SWVersion    string   `json:"sw_version,omitempty"`
+	}
+
+	discoveryMsg := struct {
+		Name                        string   `json:"name"`
+		ActionTopic                 string   `json:"action_topic"`
+		CurrentHumidityTopic        string   `json:"current_humidity_topic"`
+		CurrentTemperatureTopic     string   `json:"current_temperature_topic"`
+		FanModeCommandTopic         string   `json:"fan_mode_command_topic"`
+		FanModeStateTopic           string   `json:"fan_mode_state_topic"`
+		TemperatureLowCommandTopic  string   `json:"temperature_low_command_topic"`
+		TemperatureLowStateTopic    string   `json:"temperature_low_state_topic"`
+		TemperatureHighCommandTopic string   `json:"temperature_high_command_topic"`
+		TemperatureHighStateTopic   string   `json:"temperature_high_state_topic"`
+		PresetModeCommandTopic      string   `json:"preset_mode_command_topic"`
+		PresetModeStateTopic        string   `json:"preset_mode_state_topic"`
+		PresetModes                 []string `json:"preset_modes"`
+		ModeCommandTopic            string   `json:"mode_command_topic"`
+		ModeStateTopic              string   `json:"mode_state_topic"`
+		Modes                       []string `json:"modes"`
+		UniqueID                    string   `json:"unique_id"`
+		Device                      haDevice `json:"device"`
+	}{
+		Name:                        "carrier",
+		ActionTopic:                 fmt.Sprintf("%s/action/current", h.topicPrefix),
+		CurrentHumidityTopic:        fmt.Sprintf("%s/zone/%s/humidity/current", h.topicPrefix, zone),
+		CurrentTemperatureTopic:     fmt.Sprintf("%s/zone/%s/temperature/current", h.topicPrefix, zone),
+		FanModeCommandTopic:         fmt.Sprintf("%s/zone/%s/fanmode/set", h.topicPrefix, zone),
+		FanModeStateTopic:           fmt.Sprintf("%s/zone/%s/fanmode/current", h.topicPrefix, zone),
+		TemperatureLowCommandTopic:  fmt.Sprintf("%s/zone/%s/temp_low/set", h.topicPrefix, zone),
+		TemperatureLowStateTopic:    fmt.Sprintf("%s/zone/%s/temp_low/current", h.topicPrefix, zone),
+		TemperatureHighCommandTopic: fmt.Sprintf("%s/zone/%s/temp_high/set", h.topicPrefix, zone),
+		TemperatureHighStateTopic:   fmt.Sprintf("%s/zone/%s/temp_high/current", h.topicPrefix, zone),
+		PresetModeCommandTopic:      fmt.Sprintf("%s/zone/%s/preset_mode/set", h.topicPrefix, zone),
+		PresetModeStateTopic:        fmt.Sprintf("%s/zone/%s/preset_mode/current", h.topicPrefix, zone),
+		PresetModes:                 []string{"away", "home", "manual", "sleep", "wake", "vacation"},
+		ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
+		ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
+		Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
+		UniqueID:                    h.clientID + "-zone" + zone,
+		Device: haDevice{
+			Identifiers:  []string{serial},
+			Name:         "Carrier Infinity",
+			Manufacturer: deviceField("profile/brand"),
+			Model:        deviceField("profile/model"),
+			SWVersion:    deviceField("profile/firmware"),
+		},
+	}
+	discoveryMsgJSON, err := json.Marshal(discoveryMsg)
+	if err != nil {
+		log.Printf("Failed to encode discovery message: %s", err)
+		return
+	}
+
+	if err := h.publishRaw(
+		fmt.Sprintf("homeassistant/climate/%s-zone%s/config", serial, zone),
+		string(discoveryMsgJSON),
+	); err != nil {
+		log.Printf("Error publishing discovery message: %s", err)
+	}
+}
+
+func (h *HAMQTT) registerCallbacks(zone string) {
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/clsp", zone), func(clsp TimestampedValue) {
+		// Causes climate card to show nothing if we send None here.
+
+		// var value string
+		// switch string(mode.value.GetMaybeStrValue()) {
+		// case "cool", "auto":
+		// 	value = fmt.Sprintf("%.1f", clsp.value.GetFloatValue())
+		// default:
+		// 	value = "None"
+		// }
+
+		// if err := h.publish(fmt.Sprintf("zone/%s/temp_high/current", zone), value); err != nil {
+		// 	log.Printf("Error publishing: %s", err)
+		// }
+
+		if err := h.publish(fmt.Sprintf("zone/%s/temp_high/current", zone), fmt.Sprintf("%.1f", clsp.value.GetFloatValue())); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
+
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/htsp", zone), func(htsp TimestampedValue) {
+		// var value string
+		// switch string(mode.value.GetMaybeStrValue()) {
+		// case "heat", "auto":
+		// 	value = fmt.Sprintf("%.1f", htsp.value.GetFloatValue())
+		// default:
+		// 	value = "None"
+		// }
+
+		// if err := h.publish(fmt.Sprintf("zone/%s/temp_low/current", zone), value); err != nil {
+		// 	log.Printf("Error publishing: %s", err)
+		// }
+
+		if err := h.publish(fmt.Sprintf("zone/%s/temp_low/current", zone), fmt.Sprintf("%.1f", htsp.value.GetFloatValue())); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
+
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/fan", zone), func(mode TimestampedValue) {
+		if err := h.publish(
+			fmt.Sprintf("zone/%s/fanmode/current", zone),
+			carrierFanModeToHA[string(mode.value.GetMaybeStrValue())],
+		); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
+
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/currentActivity", zone), func(activity TimestampedValue) {
+		if err := h.publish(
+			fmt.Sprintf("zone/%s/preset_mode/current", zone),
+			string(activity.value.GetMaybeStrValue()),
+		); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
+
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/rh", zone), func(rh TimestampedValue) {
+		if err := h.publish(
+			fmt.Sprintf("zone/%s/humidity/current", zone),
+			fmt.Sprintf("%f", rh.value.GetFloatValue()),
+		); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
+
+	h.loadedValues.OnChange1(fmt.Sprintf("%s/rt", zone), func(rt TimestampedValue) {
+		if err := h.publish(
+			fmt.Sprintf("zone/%s/temperature/current", zone),
+			fmt.Sprintf("%.1f", rt.value.GetFloatValue()),
+		); err != nil {
+			log.Printf("Error publishing: %s", err)
+		}
+	})
 }
 
 func (h *HAMQTT) Run() {
@@ -346,6 +506,7 @@ func (h *HAMQTT) Run() {
 		SetOnConnectHandler(func(c mqtt_paho.Client) {
 			log.Printf("MQTT connection established to %s", h.addr)
 			h.installSubscriptions()
+			h.subscribeZone("1")
 		})
 	if h.username != "" && h.password != "" {
 		clientOptions.SetUsername(h.username)
@@ -360,131 +521,7 @@ func (h *HAMQTT) Run() {
 	log.Printf("Connected to %s", h.addr)
 
 	h.loadedValues.OnChange1("profile/serial", func(tv TimestampedValue) {
-		// Pull device metadata from LoadedValues if present. These are usually
-		// populated alongside profile/serial but not guaranteed on cold start;
-		// missing fields are omitted from the JSON so HA falls back to defaults
-		// rather than showing empty strings.
-		deviceField := func(key string) string {
-			v := h.loadedValues.Get(key)
-			if v.value == nil {
-				return ""
-			}
-			return string(v.value.GetMaybeStrValue())
-		}
-		serial := string(tv.value.GetMaybeStrValue())
-
-		type haDevice struct {
-			Identifiers  []string `json:"identifiers"`
-			Name         string   `json:"name"`
-			Manufacturer string   `json:"manufacturer,omitempty"`
-			Model        string   `json:"model,omitempty"`
-			SWVersion    string   `json:"sw_version,omitempty"`
-		}
-
-		discoveryMsg := struct {
-			Name                        string   `json:"name"`
-			ActionTopic                 string   `json:"action_topic"`
-			CurrentHumidityTopic        string   `json:"current_humidity_topic"`
-			CurrentTemperatureTopic     string   `json:"current_temperature_topic"`
-			FanModeCommandTopic         string   `json:"fan_mode_command_topic"`
-			FanModeStateTopic           string   `json:"fan_mode_state_topic"`
-			TemperatureLowCommandTopic  string   `json:"temperature_low_command_topic"`
-			TemperatureLowStateTopic    string   `json:"temperature_low_state_topic"`
-			TemperatureHighCommandTopic string   `json:"temperature_high_command_topic"`
-			TemperatureHighStateTopic   string   `json:"temperature_high_state_topic"`
-			PresetModeCommandTopic      string   `json:"preset_mode_command_topic"`
-			PresetModeStateTopic        string   `json:"preset_mode_state_topic"`
-			PresetModes                 []string `json:"preset_modes"`
-			ModeCommandTopic            string   `json:"mode_command_topic"`
-			ModeStateTopic              string   `json:"mode_state_topic"`
-			Modes                       []string `json:"modes"`
-			UniqueID                    string   `json:"unique_id"`
-			Device                      haDevice `json:"device"`
-		}{
-			Name:                        "carrier",
-			ActionTopic:                 fmt.Sprintf("%s/action/current", h.topicPrefix),
-			CurrentHumidityTopic:        fmt.Sprintf("%s/zone/1/humidity/current", h.topicPrefix),
-			CurrentTemperatureTopic:     fmt.Sprintf("%s/zone/1/temperature/current", h.topicPrefix),
-			FanModeCommandTopic:         fmt.Sprintf("%s/zone/1/fanmode/set", h.topicPrefix),
-			FanModeStateTopic:           fmt.Sprintf("%s/zone/1/fanmode/current", h.topicPrefix),
-			TemperatureLowCommandTopic:  fmt.Sprintf("%s/zone/1/temp_low/set", h.topicPrefix),
-			TemperatureLowStateTopic:    fmt.Sprintf("%s/zone/1/temp_low/current", h.topicPrefix),
-			TemperatureHighCommandTopic: fmt.Sprintf("%s/zone/1/temp_high/set", h.topicPrefix),
-			TemperatureHighStateTopic:   fmt.Sprintf("%s/zone/1/temp_high/current", h.topicPrefix),
-			PresetModeCommandTopic:      fmt.Sprintf("%s/zone/1/preset_mode/set", h.topicPrefix),
-			PresetModeStateTopic:        fmt.Sprintf("%s/zone/1/preset_mode/current", h.topicPrefix),
-			PresetModes:                 []string{"away", "home", "manual", "sleep", "wake", "vacation"},
-			ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
-			ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
-			Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
-			UniqueID:                    h.clientID,
-			Device: haDevice{
-				Identifiers:  []string{serial},
-				Name:         "Carrier Infinity",
-				Manufacturer: deviceField("profile/brand"),
-				Model:        deviceField("profile/model"),
-				SWVersion:    deviceField("profile/firmware"),
-			},
-		}
-		discoveryMsgJSON, err := json.Marshal(discoveryMsg)
-		if err != nil {
-			log.Printf("Failed to encode discovery message: %s", err)
-			return
-		}
-
-		if err := h.publishRaw(
-			fmt.Sprintf("homeassistant/climate/%s/config", tv.value.GetMaybeStrValue()),
-			string(discoveryMsgJSON),
-		); err != nil {
-			log.Printf("Error publishing discovery message: %s", err)
-		}
-	})
-
-	h.loadedValues.OnChange1("1/clsp", func(clsp TimestampedValue) {
-		// Causes climate card to show nothing if we send None here.
-
-		// var value string
-		// switch string(mode.value.GetMaybeStrValue()) {
-		// case "cool", "auto":
-		// 	value = fmt.Sprintf("%.1f", clsp.value.GetFloatValue())
-		// default:
-		// 	value = "None"
-		// }
-
-		// if err := h.publish("zone/1/temp_high/current", value); err != nil {
-		// 	log.Printf("Error publishing: %s", err)
-		// }
-
-		if err := h.publish("zone/1/temp_high/current", fmt.Sprintf("%.1f", clsp.value.GetFloatValue())); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
-	})
-
-	h.loadedValues.OnChange1("1/htsp", func(htsp TimestampedValue) {
-		// var value string
-		// switch string(mode.value.GetMaybeStrValue()) {
-		// case "heat", "auto":
-		// 	value = fmt.Sprintf("%.1f", htsp.value.GetFloatValue())
-		// default:
-		// 	value = "None"
-		// }
-
-		// if err := h.publish("zone/1/temp_low/current", value); err != nil {
-		// 	log.Printf("Error publishing: %s", err)
-		// }
-
-		if err := h.publish("zone/1/temp_low/current", fmt.Sprintf("%.1f", htsp.value.GetFloatValue())); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
-	})
-
-	h.loadedValues.OnChange1("1/fan", func(mode TimestampedValue) {
-		if err := h.publish(
-			"zone/1/fanmode/current",
-			carrierFanModeToHA[string(mode.value.GetMaybeStrValue())],
-		); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
+		h.publishDiscovery("1")
 	})
 
 	h.loadedValues.OnChange2("opmode", "opstat", func(opmode, opstat TimestampedValue) {
@@ -499,15 +536,6 @@ func (h *HAMQTT) Run() {
 		}
 	})
 
-	h.loadedValues.OnChange1("1/currentActivity", func(activity TimestampedValue) {
-		if err := h.publish(
-			"zone/1/preset_mode/current",
-			string(activity.value.GetMaybeStrValue()),
-		); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
-	})
-
 	h.loadedValues.OnChange1("system/mode", func(mode TimestampedValue) {
 		if err := h.publish(
 			"mode/current",
@@ -517,21 +545,5 @@ func (h *HAMQTT) Run() {
 		}
 	})
 
-	h.loadedValues.OnChange1("1/rh", func(rh TimestampedValue) {
-		if err := h.publish(
-			"zone/1/humidity/current",
-			fmt.Sprintf("%f", rh.value.GetFloatValue()),
-		); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
-	})
-
-	h.loadedValues.OnChange1("1/rt", func(rt TimestampedValue) {
-		if err := h.publish(
-			"zone/1/temperature/current",
-			fmt.Sprintf("%.1f", rt.value.GetFloatValue()),
-		); err != nil {
-			log.Printf("Error publishing: %s", err)
-		}
-	})
+	h.registerCallbacks("1")
 }

@@ -798,7 +798,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	go func() {
 		webControlMux := http.NewServeMux()
 
-		webControlMux.Handle("/metrics", MetricsHandler(loadedValues))
+		webControlMux.Handle("/metrics", MetricsHandler(loadedValues, "1"))
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			indexHTML, err := RenderIndex(loadedValues)
@@ -872,7 +872,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(w, `<span>Refresh requested. Full state will arrive over the next ~60 seconds.</span>`)
 		})
 		webControlMux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
-			scheduleHTML, err := RenderSchedule(loadedValues)
+			scheduleHTML, err := RenderSchedule(loadedValues, "1")
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error generating schedule: %v", err), http.StatusInternalServerError)
 				return
@@ -880,7 +880,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(w, scheduleHTML)
 		})
 		webControlMux.HandleFunc("/profiles", func(w http.ResponseWriter, r *http.Request) {
-			profilesHTML, err := RenderProfiles(loadedValues)
+			profilesHTML, err := RenderProfiles(loadedValues, "1")
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error generating profiles: %v", err), http.StatusInternalServerError)
 				return
