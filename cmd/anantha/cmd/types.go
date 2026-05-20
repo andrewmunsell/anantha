@@ -245,13 +245,17 @@ func (l *LoadedValues) RegexSubscribe(re *regexp.Regexp) <-chan TimestampedValue
 func (l *LoadedValues) OnChangeRegex(re *regexp.Regexp, callback func(TimestampedValue)) {
 	subCh := l.RegexSubscribe(re)
 
+	var pending []TimestampedValue
 	l.lock.Lock()
-	defer l.lock.Unlock()
-
 	for k, v := range l.values {
 		if re.MatchString(k) {
-			callback(v)
+			pending = append(pending, v)
 		}
+	}
+	l.lock.Unlock()
+
+	for _, v := range pending {
+		callback(v)
 	}
 
 	go func() {

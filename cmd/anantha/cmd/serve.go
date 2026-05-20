@@ -145,7 +145,6 @@ func addAllConfigSettings(ct *carrier.CarrierInfo, loadedValues *LoadedValues, s
 	loadedValues.StartLoading(sourceFileName)
 	for _, setting := range ct.ConfigSettings {
 		loadedValues.Update(setting.Name, setting, time.UnixMilli(ct.TimestampMillis), sourceFileName)
-
 	}
 	loadedValues.EndLoading(sourceFileName)
 }
@@ -798,7 +797,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	go func() {
 		webControlMux := http.NewServeMux()
 
-		webControlMux.Handle("/metrics", MetricsHandler(loadedValues, "1"))
+		webControlMux.Handle("/metrics", MetricsHandler(loadedValues))
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			indexHTML, err := RenderIndex(loadedValues)

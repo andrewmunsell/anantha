@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func MetricsHandler(loadedValues *LoadedValues, zone string) http.Handler {
+func MetricsHandler(loadedValues *LoadedValues) http.Handler {
 	outsideTempGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "anantha",
 		Name:      "outside_temp",
@@ -107,9 +107,12 @@ func MetricsHandler(loadedValues *LoadedValues, zone string) http.Handler {
 		Name:      "zone_temp",
 		Help:      "Zone temperature (in °F)",
 	}, []string{"zone"})
-	loadedValues.OnChange1(fmt.Sprintf("%s/rt", zone), func(rt TimestampedValue) {
-		zoneTempGauge.WithLabelValues(zone).Set(float64(rt.value.GetFloatValue()))
-	})
+	for zone := 1; zone <= maxZones; zone++ {
+		zoneStr := fmt.Sprintf("%d", zone)
+		loadedValues.OnChange1(fmt.Sprintf("%s/rt", zoneStr), func(rt TimestampedValue) {
+			zoneTempGauge.WithLabelValues(zoneStr).Set(float64(rt.value.GetFloatValue()))
+		})
+	}
 	prometheus.MustRegister(zoneTempGauge)
 
 	zoneHumidityGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -117,9 +120,12 @@ func MetricsHandler(loadedValues *LoadedValues, zone string) http.Handler {
 		Name:      "zone_humidity",
 		Help:      "Zone humidity percentage (0-100)",
 	}, []string{"zone"})
-	loadedValues.OnChange1(fmt.Sprintf("%s/rh", zone), func(rh TimestampedValue) {
-		zoneHumidityGauge.WithLabelValues(zone).Set(float64(rh.value.GetFloatValue()))
-	})
+	for zone := 1; zone <= maxZones; zone++ {
+		zoneStr := fmt.Sprintf("%d", zone)
+		loadedValues.OnChange1(fmt.Sprintf("%s/rh", zoneStr), func(rh TimestampedValue) {
+			zoneHumidityGauge.WithLabelValues(zoneStr).Set(float64(rh.value.GetFloatValue()))
+		})
+	}
 	prometheus.MustRegister(zoneHumidityGauge)
 
 	wallCtrlTempGauge := prometheus.NewGauge(prometheus.GaugeOpts{

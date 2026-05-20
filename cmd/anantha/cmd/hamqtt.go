@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
+	"strings"
 
 	carrier "github.com/anupcshan/anantha/pb"
 	mqtt_paho "github.com/eclipse/paho.mqtt.golang"
 )
+
+const maxZones = 8
 
 type HAMQTT struct {
 	addr         string
@@ -333,6 +337,12 @@ func (h *HAMQTT) subscribeZone(zone string) {
 }
 
 func (h *HAMQTT) publishDiscovery(zone string) {
+	serialVal := h.loadedValues.Get("profile/serial")
+	if serialVal.value == nil {
+		return
+	}
+	serial := string(serialVal.value.GetMaybeStrValue())
+
 	deviceField := func(key string) string {
 		v := h.loadedValues.Get(key)
 		if v.value == nil {
@@ -341,18 +351,22 @@ func (h *HAMQTT) publishDiscovery(zone string) {
 		return string(v.value.GetMaybeStrValue())
 	}
 
-	serialVal := h.loadedValues.Get("profile/serial")
-	if serialVal.value == nil {
-		return
-	}
-	serial := string(serialVal.value.GetMaybeStrValue())
-
 	type haDevice struct {
 		Identifiers  []string `json:"identifiers"`
 		Name         string   `json:"name"`
 		Manufacturer string   `json:"manufacturer,omitempty"`
 		Model        string   `json:"model,omitempty"`
 		SWVersion    string   `json:"sw_version,omitempty"`
+	}
+
+	uniqueID := h.clientID + "-zone" + zone
+	configTopic := fmt.Sprintf("homeassistant/climate/%s-zone%s/config", serial, zone)
+
+	// Zone 1 uses the legacy topic and unique_id for backward compatibility
+	// with pre-multi-zone deployments.
+	if zone == "1" {
+		uniqueID = h.clientID
+		configTopic = fmt.Sprintf("homeassistant/climate/%s/config", serial)
 	}
 
 	discoveryMsg := struct {
@@ -391,7 +405,7 @@ func (h *HAMQTT) publishDiscovery(zone string) {
 		ModeCommandTopic:            fmt.Sprintf("%s/mode/set", h.topicPrefix),
 		ModeStateTopic:              fmt.Sprintf("%s/mode/current", h.topicPrefix),
 		Modes:                       []string{"auto", "off", "cool", "heat", "fan_only"},
-		UniqueID:                    h.clientID + "-zone" + zone,
+		UniqueID:                    uniqueID,
 		Device: haDevice{
 			Identifiers:  []string{serial},
 			Name:         "Carrier Infinity",
@@ -406,10 +420,7 @@ func (h *HAMQTT) publishDiscovery(zone string) {
 		return
 	}
 
-	if err := h.publishRaw(
-		fmt.Sprintf("homeassistant/climate/%s-zone%s/config", serial, zone),
-		string(discoveryMsgJSON),
-	); err != nil {
+	if err := h.publishRaw(configTopic, string(discoveryMsgJSON)); err != nil {
 		log.Printf("Error publishing discovery message: %s", err)
 	}
 }
@@ -506,7 +517,9 @@ func (h *HAMQTT) Run() {
 		SetOnConnectHandler(func(c mqtt_paho.Client) {
 			log.Printf("MQTT connection established to %s", h.addr)
 			h.installSubscriptions()
-			h.subscribeZone("1")
+			for zone := 1; zone <= maxZones; zone++ {
+				h.subscribeZone(fmt.Sprintf("%d", zone))
+			}
 		})
 	if h.username != "" && h.password != "" {
 		clientOptions.SetUsername(h.username)
@@ -521,7 +534,19 @@ func (h *HAMQTT) Run() {
 	log.Printf("Connected to %s", h.addr)
 
 	h.loadedValues.OnChange1("profile/serial", func(tv TimestampedValue) {
-		h.publishDiscovery("1")
+		for zone := 1; zone <= maxZones; zone++ {
+			zoneStr := fmt.Sprintf("%d", zone)
+			if h.loadedValues.Get(fmt.Sprintf("%s/rt", zoneStr)).value != nil {
+				h.publishDiscovery(zoneStr)
+			}
+		}
+	})
+
+	// Publish discovery when a new zone's room temperature data appears
+	zoneRTRegex := regexp.MustCompile("^[1-8]/rt$")
+	h.loadedValues.OnChangeRegex(zoneRTRegex, func(tv TimestampedValue) {
+		zone := strings.SplitN(tv.value.Name, "/", 2)[0]
+		h.publishDiscovery(zone)
 	})
 
 	h.loadedValues.OnChange2("opmode", "opstat", func(opmode, opstat TimestampedValue) {
@@ -545,5 +570,7 @@ func (h *HAMQTT) Run() {
 		}
 	})
 
-	h.registerCallbacks("1")
+	for zone := 1; zone <= maxZones; zone++ {
+		h.registerCallbacks(fmt.Sprintf("%d", zone))
+	}
 }
