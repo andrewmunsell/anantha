@@ -133,12 +133,22 @@
 				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
 				<h1>Anantha</h1>
 			</div>
-			<div class="nav-links">
+			<div class="nav-links" id="nav-links">
 				<a href="/">Dashboard</a>
 				<a href="/schedule">Schedule</a>
 				<a href="/profiles" class="active">Profiles</a>
 				<a href="/mqtt-log">MQTT Log</a>
 			</div>
+			{{if gt (len .Zones) 1}}
+			<div class="zone-selector">
+				<label for="zone-select">Zone:</label>
+				<select id="zone-select">
+					{{range .Zones}}
+					<option value="{{.Zone}}" {{if eq .Zone $.Zone}}selected{{end}}>{{.Name}}</option>
+					{{end}}
+				</select>
+			</div>
+			{{end}}
 		</header>
 
 		<div class="profiles-grid">
@@ -176,5 +186,20 @@
 			{{end}}
 		</div>
 	</div>
+	<script>
+		const zoneSelect = document.getElementById('zone-select');
+		if (zoneSelect) {
+			zoneSelect.addEventListener('change', function() {
+				const zone = this.value;
+				const url = new URL(window.location);
+				if (zone && zone !== '1') {
+					url.searchParams.set('zone', zone);
+				} else {
+					url.searchParams.delete('zone');
+				}
+				window.location.href = url.toString();
+			});
+		}
+	</script>
 </body>
 </html>

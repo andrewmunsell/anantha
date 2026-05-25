@@ -45,12 +45,14 @@ func init() {
 // IndexData holds data for the index/dashboard template
 type IndexData struct {
 	StateComplete bool
+	Zones         []zoneInfo
 }
 
 // RenderIndex renders the index/dashboard template
 func RenderIndex(loadedValues *LoadedValues) (string, error) {
 	data := IndexData{
 		StateComplete: stateLooksComplete(loadedValues),
+		Zones:         getActiveZones(loadedValues),
 	}
 	var buf bytes.Buffer
 	if err := indexTemplate.Execute(&buf, data); err != nil {
@@ -84,6 +86,8 @@ type ActivityData struct {
 // ProfilesData holds data for the profiles template
 type ProfilesData struct {
 	Activities []ActivityData
+	Zone      string
+	Zones     []zoneInfo
 }
 
 // RenderProfiles renders the profiles template with data from loadedValues
@@ -93,6 +97,8 @@ func RenderProfiles(loadedValues *LoadedValues, zone string) (string, error) {
 
 	data := ProfilesData{
 		Activities: make([]ActivityData, 0, len(activities)),
+		Zone:      zone,
+		Zones:     getActiveZones(loadedValues),
 	}
 
 	for _, activity := range activities {
@@ -171,7 +177,9 @@ type DayScheduleData struct {
 
 // ScheduleData holds data for the schedule template
 type ScheduleData struct {
-	Days []DayScheduleData
+	Days  []DayScheduleData
+	Zone  string
+	Zones []zoneInfo
 }
 
 // RenderSchedule renders the schedule template with data from loadedValues
@@ -223,7 +231,9 @@ func RenderSchedule(loadedValues *LoadedValues, zone string) (string, error) {
 	currentTimePercent := float64(currentTimeMinutes) / float64(24*60) * 100
 
 	data := ScheduleData{
-		Days: make([]DayScheduleData, 0, len(days)),
+		Days:  make([]DayScheduleData, 0, len(days)),
+		Zone:  zone,
+		Zones: getActiveZones(loadedValues),
 	}
 
 	for _, day := range days {

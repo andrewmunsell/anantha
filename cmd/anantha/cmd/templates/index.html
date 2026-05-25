@@ -246,6 +246,14 @@
 		.refresh-state-row .error {
 			color: var(--danger);
 		}
+
+		.zone-only {
+			display: none;
+		}
+
+		.has-zones .zone-only {
+			display: flex;
+		}
 	</style>
 </head>
 <body>
@@ -255,12 +263,22 @@
 				<img src="/assets/logo.svg" alt="Anantha Logo" class="logo">
 				<h1>Anantha</h1>
 			</div>
-			<div class="nav-links">
+			<div class="nav-links" id="nav-links">
 				<a href="/" class="active">Dashboard</a>
 				<a href="/schedule">Schedule</a>
 				<a href="/profiles">Profiles</a>
 				<a href="/mqtt-log">MQTT Log</a>
 			</div>
+			{{if gt (len .Zones) 1}}
+			<div class="zone-selector zone-only">
+				<label for="zone-select">Zone:</label>
+				<select id="zone-select">
+					{{range .Zones}}
+					<option value="{{.Zone}}">{{.Name}}</option>
+					{{end}}
+				</select>
+			</div>
+			{{end}}
 		</header>
 
 		<div hx-ext="sse" sse-connect="/events">
@@ -318,7 +336,7 @@
 				<div class="card">
 					<div class="data-item">
 						<div class="data-label">Zone</div>
-						<div class="zone-name" sse-swap="1/name">Zone Name Pending</div>
+						<div class="zone-name" id="zone-name">Zone Name Pending</div>
 					</div>
 				</div>
 			</div>
@@ -329,31 +347,31 @@
 				<div class="data-grid grid-cols-2 grid-cols-3">
 					<div class="data-item">
 						<div class="data-label">Temperature</div>
-						<div class="data-value temp-value" sse-swap="1/rt">Pending</div>
+						<div class="data-value temp-value" id="zone-rt">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Humidity</div>
-						<div class="data-value humidity-value" sse-swap="1/rh">Pending</div>
+						<div class="data-value humidity-value" id="zone-rh">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Current Activity</div>
-						<div class="data-value" sse-swap="1/currentActivity">Pending</div>
+						<div class="data-value" id="zone-currentActivity">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Conditioning</div>
-						<div class="data-value" sse-swap="1/zoneconditioning">Pending</div>
+						<div class="data-value" id="zone-zoneconditioning">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Heat Setpoint</div>
-						<div class="data-value" sse-swap="1/htsp">Pending</div>
+						<div class="data-value" id="zone-htsp">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Cool Setpoint</div>
-						<div class="data-value" sse-swap="1/clsp">Pending</div>
+						<div class="data-value" id="zone-clsp">Pending</div>
 					</div>
 					<div class="data-item">
 						<div class="data-label">Fan Status</div>
-						<div class="data-value" sse-swap="1/fan">Pending</div>
+						<div class="data-value" id="zone-fan">Pending</div>
 					</div>
 				</div>
 			</div>
@@ -499,6 +517,132 @@
 
 		let lastUpdateTime = null;
 
+		// Zone management
+		const defaultZone = "{{if .Zones}}{{(index .Zones 0).Zone}}{{else}}1{{end}}";
+		window.selectedZone = sessionStorage.getItem('anantha-zone') || defaultZone;
+
+		// Cache latest values per zone: { "1": { rt: "72.5 F", rh: "45.0 %", ... }, "2": {...} }
+		const zoneCache = {};
+
+		// Zone data field names that we track (suffix after <zone>/)
+		const zoneFields = ['name', 'rt', 'rh', 'htsp', 'clsp', 'fan', 'currentActivity', 'zoneconditioning'];
+
+		// Initialize zone cache from template data
+		{{range .Zones}}
+		zoneCache["{{.Zone}}"] = {};
+		{{end}}
+
+		function updateZoneDOM(zone) {
+			const data = zoneCache[zone] || {};
+			for (const field of zoneFields) {
+				const el = document.getElementById('zone-' + field);
+				if (el) {
+					el.textContent = data[field] || 'Pending';
+				}
+			}
+			// Update the zone name separately (it has a different id)
+			const nameEl = document.getElementById('zone-name');
+			if (nameEl) {
+				nameEl.textContent = data['name'] || 'Zone ' + zone;
+			}
+		}
+
+		function updateNavLinks(zone) {
+			const links = document.querySelectorAll('#nav-links a');
+			links.forEach(function(link) {
+				const url = new URL(link.href, window.location.origin);
+				if (zone && zone !== '1') {
+					url.searchParams.set('zone', zone);
+				} else {
+					url.searchParams.delete('zone');
+				}
+				link.href = url.pathname + url.search;
+			});
+		}
+
+		function setZone(zone) {
+			window.selectedZone = zone;
+			sessionStorage.setItem('anantha-zone', zone);
+			const select = document.getElementById('zone-select');
+			if (select) select.value = zone;
+			updateZoneDOM(zone);
+			updateNavLinks(zone);
+		}
+
+		// Wire up zone selector
+		const zoneSelect = document.getElementById('zone-select');
+		if (zoneSelect) {
+			zoneSelect.value = window.selectedZone;
+			zoneSelect.addEventListener('change', function() {
+				setZone(this.value);
+			});
+		}
+
+		// Apply styling class for multi-zone
+		{{if gt (len .Zones) 1}}
+		document.querySelector('header').classList.add('has-zones');
+		{{end}}
+
+		// Zone-specific EventSource: separate connection from htmx SSE
+		// so we can selectively update DOM based on the selected zone.
+		// htmx SSE continues handling system-wide events via sse-swap attributes.
+		const zoneEventRegex = /^(\d+)\/(.+)$/;
+
+		const zoneSource = new EventSource('/events');
+
+		// Listen for last-updated from our EventSource (overrides htmx's)
+		zoneSource.addEventListener('last-updated', function(evt) {
+			lastUpdateTime = new Date(evt.data);
+			updateRelativeTime();
+		});
+
+		// Listen for zone-specific events from EventSource
+		zoneSource.addEventListener('1/name', function(evt) { handleZoneEvent('1', 'name', evt.data); });
+		zoneSource.addEventListener('1/rt', function(evt) { handleZoneEvent('1', 'rt', evt.data); });
+		zoneSource.addEventListener('1/rh', function(evt) { handleZoneEvent('1', 'rh', evt.data); });
+		zoneSource.addEventListener('1/htsp', function(evt) { handleZoneEvent('1', 'htsp', evt.data); });
+		zoneSource.addEventListener('1/clsp', function(evt) { handleZoneEvent('1', 'clsp', evt.data); });
+		zoneSource.addEventListener('1/fan', function(evt) { handleZoneEvent('1', 'fan', evt.data); });
+		zoneSource.addEventListener('1/currentActivity', function(evt) { handleZoneEvent('1', 'currentActivity', evt.data); });
+		zoneSource.addEventListener('1/zoneconditioning', function(evt) { handleZoneEvent('1', 'zoneconditioning', evt.data); });
+		{{range .Zones}}
+		{{if ne .Zone "1"}}
+		zoneSource.addEventListener('{{.Zone}}/name', function(evt) { handleZoneEvent('{{.Zone}}', 'name', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/rt', function(evt) { handleZoneEvent('{{.Zone}}', 'rt', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/rh', function(evt) { handleZoneEvent('{{.Zone}}', 'rh', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/htsp', function(evt) { handleZoneEvent('{{.Zone}}', 'htsp', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/clsp', function(evt) { handleZoneEvent('{{.Zone}}', 'clsp', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/fan', function(evt) { handleZoneEvent('{{.Zone}}', 'fan', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/currentActivity', function(evt) { handleZoneEvent('{{.Zone}}', 'currentActivity', evt.data); });
+		zoneSource.addEventListener('{{.Zone}}/zoneconditioning', function(evt) { handleZoneEvent('{{.Zone}}', 'zoneconditioning', evt.data); });
+		{{end}}
+		{{end}}
+
+		function handleZoneEvent(zone, field, data) {
+			if (!zoneCache[zone]) {
+				zoneCache[zone] = {};
+			}
+			zoneCache[zone][field] = data;
+
+			// Only update DOM if this event is for the selected zone
+			if (zone === window.selectedZone) {
+				const el = document.getElementById('zone-' + field);
+				if (el) {
+					el.textContent = data;
+				}
+				if (field === 'name') {
+					const nameEl = document.getElementById('zone-name');
+					if (nameEl) {
+						nameEl.textContent = data;
+					}
+				}
+			}
+		}
+
+		// Apply initial zone state
+		updateZoneDOM(window.selectedZone);
+		updateNavLinks(window.selectedZone);
+
 		function updateRelativeTime() {
 			const lastUpdatedElement = document.getElementById('last-updated-text');
 			const connectionStatusElement = document.getElementById('connection-status');
@@ -508,11 +652,9 @@
 				const lastUpdate = dayjs(lastUpdateTime);
 				const diffMinutes = now.diff(lastUpdate, 'minute');
 
-				// Use dayjs for relative time formatting
 				const relativeText = lastUpdate.fromNow();
 				lastUpdatedElement.textContent = relativeText;
 
-				// Consider disconnected if no updates in last 5 minutes
 				const isConnected = diffMinutes < 5;
 
 				if (isConnected) {
@@ -525,15 +667,7 @@
 			}
 		}
 
-		// Listen for SSE events to update lastUpdateTime
-		document.addEventListener('htmx:sseMessage', function(evt) {
-			if (evt.detail.type === 'last-updated') {
-				lastUpdateTime = new Date(evt.detail.data);
-				updateRelativeTime();
-			}
-		});
-
-		// Update relative time every 2 seconds (dayjs handles the formatting)
+		// Update relative time every 2 seconds
 		setInterval(updateRelativeTime, 2000);
 	</script>
 </body>

@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/tls"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -484,6 +485,32 @@ func addCrossoverBlocks(daySchedules map[string][]SchedulePeriod, days []string)
 	return nil
 }
 
+// zoneInfo holds zone number and its display name.
+type zoneInfo struct {
+	Zone string
+	Name string
+}
+
+// getActiveZones discovers which zones (1-8) have live data by checking for
+// <zone>/rt keys in the current snapshot. Returns zones sorted numerically.
+func getActiveZones(loadedValues *LoadedValues) []zoneInfo {
+	snapshot := loadedValues.Snapshot()
+	var zones []zoneInfo
+	for zone := 1; zone <= maxZones; zone++ {
+		zoneStr := fmt.Sprintf("%d", zone)
+		if tv, ok := snapshot[zoneStr+"/rt"]; ok && tv.value != nil {
+			name := zoneStr
+			if nameTv, hasName := snapshot[zoneStr+"/name"]; hasName && nameTv.value != nil {
+				if n := string(nameTv.value.GetMaybeStrValue()); n != "" {
+					name = n
+				}
+			}
+			zones = append(zones, zoneInfo{Zone: zoneStr, Name: name})
+		}
+	}
+	return zones
+}
+
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the anantha server",
@@ -799,6 +826,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 		webControlMux.Handle("/metrics", MetricsHandler(loadedValues))
 		webControlMux.Handle("/assets/", http.FileServer(http.FS(assets)))
+		webControlMux.HandleFunc("/zones", func(w http.ResponseWriter, r *http.Request) {
+			zones := getActiveZones(loadedValues)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(zones)
+		})
 		webControlMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			indexHTML, err := RenderIndex(loadedValues)
 			if err != nil {
@@ -871,7 +903,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(w, `<span>Refresh requested. Full state will arrive over the next ~60 seconds.</span>`)
 		})
 		webControlMux.HandleFunc("/schedule", func(w http.ResponseWriter, r *http.Request) {
-			scheduleHTML, err := RenderSchedule(loadedValues, "1")
+			zone := r.URL.Query().Get("zone")
+			if zone == "" {
+				zone = "1"
+			}
+			scheduleHTML, err := RenderSchedule(loadedValues, zone)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error generating schedule: %v", err), http.StatusInternalServerError)
 				return
@@ -879,7 +915,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprint(w, scheduleHTML)
 		})
 		webControlMux.HandleFunc("/profiles", func(w http.ResponseWriter, r *http.Request) {
-			profilesHTML, err := RenderProfiles(loadedValues, "1")
+			zone := r.URL.Query().Get("zone")
+			if zone == "" {
+				zone = "1"
+			}
+			profilesHTML, err := RenderProfiles(loadedValues, zone)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error generating profiles: %v", err), http.StatusInternalServerError)
 				return
@@ -929,19 +969,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 		webControlMux.Handle("/events", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
 
+			// Discover active zones from current data
+			activeZoneInfos := getActiveZones(loadedValues)
+			var activeZones []string
+			for _, zi := range activeZoneInfos {
+				activeZones = append(activeZones, zi.Zone)
+			}
+			zoneSuffixes := []string{"clsp", "currentActivity", "fan", "htsp", "name", "rh", "rt", "zoneconditioning"}
+
 			topics := []string{
 				"sensor/wallControl/rh",
 				"sensor/wallControl/rt",
 				"system/oat",
 				"system/mode",
-				"1/clsp",
-				"1/currentActivity",
-				"1/fan",
-				"1/htsp",
-				"1/name",
-				"1/rh",
-				"1/rt",
-				"1/zoneconditioning",
 				"blwrpm",
 				"comprpm",
 				"instant",
@@ -992,6 +1032,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 				"notification/13",
 				"notification/14",
 				"notification/15",
+			}
+
+			// Add per-zone topics for all active zones
+			for _, zone := range activeZones {
+				for _, suffix := range zoneSuffixes {
+					topics = append(topics, zone+"/"+suffix)
+				}
 			}
 
 			currentValues := make(map[string]TimestampedValue)
@@ -1106,6 +1153,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 					processUpdate(v)
 				}
 			}
+
+			// Send list of active zones for client-side zone selector
+			sendEvent("zones-available", strings.Join(activeZones, ","))
 
 			// Subscribe and process updates
 			subCh := loadedValues.Subscribe(topics)
